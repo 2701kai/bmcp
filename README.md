@@ -65,7 +65,11 @@ OAuth, which Claude also supports (DCR or CIMD); this server does not need it ye
 **Vercel, Bun runtime.** `vercel.json` pins `framework: "bun"` and `bunVersion: "1.4.x"`;
 the Bun framework preset picks up `src/server.ts` because it calls `Bun.serve()` once at
 start. The pin matters: without it Vercel detects Hono from `package.json` first and builds
-for Node, where `Bun.serve()` does not exist. Push the repo,
+for Node, where `Bun.serve()` does not exist. Two more things keep that build green:
+`package.json` `main` names `src/server.ts` (the builder would otherwise take the first
+module that imports Hono as the entry), and `typescript` stays on 5.x (the builder
+type-checks with the project's copy through the classic compiler API, which 7.x does not
+ship). Push the repo,
 import it in Vercel, set `BMCP_TOKEN` (and `VERCEL_TOKEN`, `VERCEL_TEAM_ID` for
 `deploy_status`) as environment variables, attach `mcp.bevmaq.com`. The MCP endpoint is
 stateless (a fresh server per request), which is what serverless wants.
@@ -93,7 +97,7 @@ document count and whether Vercel is configured; `/` reports name, version and a
 src/
   server.ts       Bun.serve entry (local and Vercel)
   stdio.ts        stdio entry for a local client
-  app.ts          Hono app: /mcp (Streamable HTTP, stateless), /health, bearer auth
+  http.ts         Hono app: /mcp (Streamable HTTP, stateless), /health, bearer auth
   mcp.ts          the tools, resources and prompts
   product-api.ts  product.bevmaq.com client with a short cache
   listings.ts     one API record into buyer facts (sections, specs, capacity, containers)

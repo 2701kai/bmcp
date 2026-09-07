@@ -1,7 +1,9 @@
 /**
  * The HTTP face of the server: a Hono app with the MCP endpoint at /mcp (Streamable HTTP,
  * stateless, one transport per request so it runs on serverless as well as on a box),
- * /health for monitors, and a bearer check in front of /mcp.
+ * /health for monitors, and a bearer check in front of /mcp. Not named app.ts: Vercel's
+ * builder treats app/index/server files that import Hono as entry candidates, and the
+ * entry is src/server.ts.
  */
 
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";

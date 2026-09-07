@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { join } from "node:path";
-import { createApp } from "../src/app.ts";
+import { createApp } from "../src/http.ts";
 import { Knowledge } from "../src/knowledge.ts";
 import { ProductApi } from "../src/product-api.ts";
 import { Vercel } from "../src/vercel.ts";

@@ -36,7 +36,10 @@ data.
 
 `vercel.json` pins the Bun framework preset (`framework: "bun"`) and the Bun 1.4 runtime;
 the preset picks up `src/server.ts` because it calls `Bun.serve()` once. The pin is needed
-because Vercel otherwise detects Hono first and builds for Node. Anywhere else: the Dockerfile, or
+because Vercel otherwise detects Hono first and builds for Node. `package.json` `main` also
+names `src/server.ts` (the builder would otherwise take the first module importing Hono),
+and `typescript` stays on 5.x (the builder type-checks through the classic compiler API,
+which 7.x lacks). Anywhere else: the Dockerfile, or
 `bun src/server.ts` under a process manager. `/health` reports available listings, doc
 count and whether Vercel is configured.
 
