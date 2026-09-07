@@ -8,7 +8,7 @@ repos:
   - name: bmcp
     purpose: The BEVMAQ MCP server; catalogue, knowledge, repo map and deploy state for every Claude surface.
     url: https://github.com/2701kai/bmcp
-    stack: [TypeScript 7, Bun 1.4, MCP SDK 1.30, Hono]
+    stack: [TypeScript 5, Bun 1.4, MCP SDK 1.30, Hono]
     runs: "bun install && bun run dev  (MCP at http://localhost:8787/mcp)"
     entry: src/server.ts (HTTP), src/stdio.ts (stdio)
     talks_to: [product.bevmaq.com, api.vercel.com]
