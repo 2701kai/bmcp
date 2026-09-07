@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "bun",
-  "bunVersion": "1.4.x"
+  "bunVersion": "1.4.x",
+  "functions": {
+    "src/server.ts": {
+      "includeFiles": "{knowledge/**,repos.yaml}"
+    }
+  }
 }
