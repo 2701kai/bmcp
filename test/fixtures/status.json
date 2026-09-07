@@ -1,0 +1,6 @@
+[
+  {"sku": "HR-FIL-GAI-2016-00001", "available": true, "slug": "gai-mle-661_HR-FIL-GAI-2016-00001", "price": {"amount": 89000, "currency": "EUR"}},
+  {"sku": "DE-LAB-GER-2020-00001", "available": true, "slug": "gernep-labetta_DE-LAB-GER-2020-00001", "price": {"amount": 45000, "currency": "EUR"}},
+  {"sku": "FR-BLO-SID-2006-00001", "available": true, "slug": "sidel-sbo-2-xl-compact_FR-BLO-SID-2006-00001", "price": null},
+  {"sku": "NL-OTH-CER-2016-00001", "available": false, "slug": "certuss-junior-400-eg_NL-OTH-CER-2016-00001", "price": null}
+]

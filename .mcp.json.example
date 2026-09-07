@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "bevmaq": {
+      "type": "http",
+      "url": "https://mcp.bevmaq.com/mcp",
+      "headers": { "Authorization": "Bearer ${BMCP_TOKEN}" }
+    }
+  }
+}

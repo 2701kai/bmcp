@@ -1,0 +1,55 @@
+# The BEVMAQ repository map, served by the repo_map tool and the bevmaq://repos resource.
+# One entry per repository: what it is, where it lives, how it runs, what it talks to.
+# Keep it honest and short; details belong in knowledge/projects/<name>.md.
+organisation: BEVMAQ GmbH
+updated: 2026-09-06
+
+repos:
+  - name: bmcp
+    purpose: The BEVMAQ MCP server; catalogue, knowledge, repo map and deploy state for every Claude surface.
+    url: https://github.com/2701kai/bmcp
+    stack: [TypeScript 7, Bun 1.4, MCP SDK 1.30, Hono]
+    runs: "bun install && bun run dev  (MCP at http://localhost:8787/mcp)"
+    entry: src/server.ts (HTTP), src/stdio.ts (stdio)
+    talks_to: [product.bevmaq.com, api.vercel.com]
+    deploy: Vercel, Bun runtime, framework preset; or the Dockerfile
+    status: v0
+
+  - name: bmi_shopping
+    purpose: The buyer agent for bevmaq.com/buy on Anthropic's open-source commerce-agents shopping agent; shortlist to quote request.
+    url: https://github.com/2701kai/bmi_shopping
+    stack: [Python 3.11, FastAPI, Next.js 16, Tailwind v4, Bun]
+    runs: "./scripts/dev.sh  (API :8000, web :3000)"
+    entry: agent/main.py (API), web/app/page.tsx (storefront)
+    talks_to: [product.bevmaq.com, Anthropic API]
+    deploy: API on any ASGI host with outbound access; web on Vercel with root directory web
+    status: prototype
+
+  - name: bevmaq.com
+    purpose: The public marketplace site; listing pages, category browsing, quote forms, llms.txt, sitemap, country domains.
+    host: https://www.bevmaq.com
+    talks_to: [product.bevmaq.com]
+    deploy: Vercel (BEVMAQ team)
+    notes: Next.js pages carry the product record in __NEXT_DATA__; fill in the repository URL and run command.
+
+  - name: product.bevmaq.com
+    purpose: The public product API every listing is served from (/v1/, /v1/{sku}/, /v1/status/).
+    host: https://product.bevmaq.com/v1/
+    notes: See knowledge/platform/product-api.md; fill in the repository, stack and deploy target.
+
+  - name: sell-bevmaq
+    purpose: The seller-side PWA; nameplate extraction from photos and its API.
+    notes: Fill in the URL, stack and run command.
+
+  - name: gmail-mcp
+    purpose: Multi-account Gmail MCP server for the BEVMAQ mailboxes.
+    notes: Fill in the URL and run command.
+
+  - name: beverage-arena
+    purpose: The Beverage Arena RAG platform for BEVMAQ.
+    notes: Fill in the URL, stack and hosting.
+
+  - name: knowledge-hub
+    purpose: Knowledge hub and wiki scaffold for bevmaq.com plus the mother.bevmaq.com internal wiki.
+    host: https://mother.bevmaq.com
+    notes: Candidate source for this server's knowledge folder; fill in the repository.
