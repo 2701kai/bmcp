@@ -69,7 +69,9 @@ for Node, where `Bun.serve()` does not exist. Two more things keep that build gr
 `package.json` `main` names `src/server.ts` (the builder would otherwise take the first
 module that imports Hono as the entry), and `typescript` stays on 5.x (the builder
 type-checks with the project's copy through the classic compiler API, which 7.x does not
-ship). Push the repo,
+ship). The knowledge folder and `repos.yaml` are read at run time rather than imported, so
+`vercel.json` lists them under `functions` / `includeFiles`; without that the function ships
+without them and `/health` reports zero documents. Push the repo,
 import it in Vercel, set `BMCP_TOKEN` (and `VERCEL_TOKEN`, `VERCEL_TEAM_ID` for
 `deploy_status`) as environment variables, attach `mcp.bevmaq.com`. The MCP endpoint is
 stateless (a fresh server per request), which is what serverless wants.
