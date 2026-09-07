@@ -3,7 +3,7 @@
 The BEVMAQ MCP server. One server that every Claude surface can use: Claude Code in
 any BEVMAQ repository, claude.ai chat and the desktop and mobile apps (as a custom
 connector), published artifacts (through the viewer's connector), and the buyer agent's
-managed-agents path. TypeScript 7, Bun 1.4, MCP SDK 1.30, Hono.
+managed-agents path. TypeScript 5, Bun 1.4, MCP SDK 1.30, Hono.
 
 ## What it serves
 
