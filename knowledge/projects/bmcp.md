@@ -34,8 +34,9 @@ data.
 
 ## Deploy
 
-`vercel.json` sets the Bun 1.4 runtime; the Bun framework preset picks up
-`src/server.ts` because it calls `Bun.serve()` once. Anywhere else: the Dockerfile, or
+`vercel.json` pins the Bun framework preset (`framework: "bun"`) and the Bun 1.4 runtime;
+the preset picks up `src/server.ts` because it calls `Bun.serve()` once. The pin is needed
+because Vercel otherwise detects Hono first and builds for Node. Anywhere else: the Dockerfile, or
 `bun src/server.ts` under a process manager. `/health` reports available listings, doc
 count and whether Vercel is configured.
 

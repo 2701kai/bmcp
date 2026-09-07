@@ -62,8 +62,10 @@ OAuth, which Claude also supports (DCR or CIMD); this server does not need it ye
 
 ## Deploy
 
-**Vercel, Bun runtime.** `vercel.json` sets `bunVersion: "1.4.x"`; the Bun framework
-preset detects `src/server.ts` because it calls `Bun.serve()` once at start. Push the repo,
+**Vercel, Bun runtime.** `vercel.json` pins `framework: "bun"` and `bunVersion: "1.4.x"`;
+the Bun framework preset picks up `src/server.ts` because it calls `Bun.serve()` once at
+start. The pin matters: without it Vercel detects Hono from `package.json` first and builds
+for Node, where `Bun.serve()` does not exist. Push the repo,
 import it in Vercel, set `BMCP_TOKEN` (and `VERCEL_TOKEN`, `VERCEL_TEAM_ID` for
 `deploy_status`) as environment variables, attach `mcp.bevmaq.com`. The MCP endpoint is
 stateless (a fresh server per request), which is what serverless wants.
