@@ -1,21 +1,29 @@
 /**
- * The HTTP face of the server: a Hono app with the MCP endpoint at /mcp (Streamable HTTP,
- * stateless, one transport per request so it runs on serverless as well as on a box),
- * /health for monitors, and a bearer check in front of /mcp. Not named app.ts: Vercel's
- * builder treats app/index/server files that import Hono as entry candidates, and the
- * entry is src/server.ts.
+ * The HTTP face of the server: a Hono app with the MCP endpoint at /mcp, /health for
+ * monitors, and a bearer check in front of /mcp. Not named app.ts: Vercel's builder treats
+ * app/index/server files that import Hono as entry candidates, and the entry is src/server.ts.
+ *
+ * /mcp is served by the SDK's createMcpHandler: a fresh McpServer per request, the
+ * 2026-07-28 protocol for current clients and stateless Streamable HTTP for 2025-era ones,
+ * so it runs on serverless as well as on a box.
  */
 
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { createMcpHandler } from "@modelcontextprotocol/server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { allowedTokens, authorized } from "./auth.ts";
 import { createMcpServer, type Services } from "./mcp.ts";
 
+/** Request headers a browser-based client (an artifact, the inspector) must be allowed to send. */
+const MCP_HEADERS = ["Content-Type", "Authorization", "Accept", "MCP-Protocol-Version", "Mcp-Method", "Mcp-Name", "Mcp-Session-Id"];
+
 export function createApp(services: Services, tokens = allowedTokens()): Hono {
   const app = new Hono();
+  const mcp = createMcpHandler(() => createMcpServer(services), {
+    onerror: (error) => console.error(`mcp: ${error.message}`),
+  });
 
-  app.use("/mcp", cors({ origin: "*", allowHeaders: ["Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"], exposeHeaders: ["Mcp-Session-Id"] }));
+  app.use("/mcp", cors({ origin: "*", allowHeaders: MCP_HEADERS, exposeHeaders: ["Mcp-Session-Id"] }));
 
   app.get("/", (c) =>
     c.json({
@@ -41,15 +49,7 @@ export function createApp(services: Services, tokens = allowedTokens()): Hono {
     if (!authorized(c.req.raw, tokens)) {
       return c.json({ error: "unauthorized", hint: "send Authorization: Bearer <BMCP_TOKEN>" }, 401, { "WWW-Authenticate": 'Bearer realm="bevmaq-mcp"' });
     }
-    // Stateless: a fresh server and transport per request, closed when the response ends.
-    const server = createMcpServer(services);
-    const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });
-    await server.connect(transport);
-    try {
-      return await transport.handleRequest(c.req.raw);
-    } finally {
-      queueMicrotask(() => void server.close());
-    }
+    return mcp.fetch(c.req.raw);
   });
 
   return app;

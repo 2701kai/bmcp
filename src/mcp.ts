@@ -10,15 +10,19 @@
  *
  * Every doc is also an MCP resource (`bevmaq://docs/<path>`), and two prompts package the
  * recurring jobs: a machine brief for a buyer, and the Instagram ad brief for the designer.
+ *
+ * Tools that return data declare an outputSchema and return the same value as
+ * structuredContent; the schemas live next to the types they describe (listings.ts,
+ * knowledge.ts, vercel.ts), so the wire contract and the code cannot drift apart.
  */
 
-import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import type { Knowledge } from "./knowledge.ts";
-import { summarize, toListing, type Listing } from "./listings.ts";
+import { HitSchema, type Knowledge } from "./knowledge.ts";
+import { ListingSchema, ListingSummarySchema, summarize, toListing, type Listing } from "./listings.ts";
 import type { ProductApi } from "./product-api.ts";
 import { loadRepoMap, renderRepoMap } from "./repos.ts";
-import type { Vercel } from "./vercel.ts";
+import { DeploymentSchema, ProjectSchema, type Vercel } from "./vercel.ts";
 
 export interface Services {
   products: ProductApi;
@@ -47,8 +51,36 @@ const CATEGORIES = [
   "other-machinery",
 ] as const;
 
-function json(value: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }], structuredContent: value as Record<string, unknown> };
+// -- result shapes (outputSchema) ---------------------------------------------------------
+
+const SearchListingsOutput = z.object({
+  total_matches: z.number(),
+  showing: z.number(),
+  results: z.array(ListingSummarySchema.extend({ available: z.boolean() })),
+});
+
+const CatalogStatusOutput = z.object({
+  available: z.number(),
+  sold_or_withdrawn: z.number(),
+  per_category: z.record(z.string(), z.number()),
+  newest: z.array(ListingSummarySchema),
+  available_later: z.array(z.object({ sku: z.string(), title: z.string(), available: z.string() })),
+  price_on_request: z.array(z.string()),
+});
+
+const SearchKnowledgeOutput = z.object({ hits: z.array(HitSchema) });
+
+const DeployStatusOutput = z.object({
+  project: z.string().nullable(),
+  projects: z.array(ProjectSchema),
+  deployments: z.array(DeploymentSchema),
+});
+
+// -- result helpers -----------------------------------------------------------------------
+
+/** A data result: the value as structuredContent, plus a text block (the JSON unless given). */
+function structured<T extends Record<string, unknown>>(value: T, text = JSON.stringify(value, null, 2)) {
+  return { content: [{ type: "text" as const, text }], structuredContent: value };
 }
 
 function text(value: string) {
@@ -56,7 +88,7 @@ function text(value: string) {
 }
 
 function failure(message: string) {
-  return { isError: true, content: [{ type: "text" as const, text: message }] };
+  return { isError: true as const, content: [{ type: "text" as const, text: message }] };
 }
 
 /** Relevance for a free-text query: title, manufacturer, model, type and category matches weigh most; the description counts too. */
@@ -82,12 +114,29 @@ function terms(query: string): string[] {
     .filter((term) => term.length > 1 && !STOP.has(term));
 }
 
+/** Cache hints for the 2026-07-28 protocol: lists change only with a deploy, so clients may keep them a while. */
+const LIST_CACHE = { ttlMs: 300_000, cacheScope: "private" as const };
+const DOC_CACHE = { ttlMs: 60_000, cacheScope: "private" as const };
+
 export function createMcpServer(services: Services): McpServer {
   const server = new McpServer(
-    { name: "bevmaq", version: services.version },
+    {
+      name: "bevmaq",
+      title: "BEVMAQ",
+      version: services.version,
+      description: "BEVMAQ's catalogue of used beverage machinery, internal knowledge, repository map and deploy state.",
+      websiteUrl: "https://bevmaq.com",
+    },
     {
       instructions:
         "BEVMAQ is a B2B marketplace for used beverage machinery (bevmaq.com). Prices are ExWorks in EUR excluding VAT; every machine can be inspected at its location. Use search_listings and get_listing for machines, search_knowledge and read_doc for how BEVMAQ's systems and processes work, repo_map before opening any BEVMAQ repository, and deploy_status for what is live on Vercel. Cite SKUs (like HR-FIL-GAI-2016-00001) whenever you name a machine.",
+      cacheHints: {
+        "tools/list": LIST_CACHE,
+        "prompts/list": LIST_CACHE,
+        "resources/list": LIST_CACHE,
+        "resources/templates/list": LIST_CACHE,
+        "server/discover": LIST_CACHE,
+      },
     },
   );
 
@@ -99,7 +148,7 @@ export function createMcpServer(services: Services): McpServer {
       title: "Search BEVMAQ listings",
       description:
         "Search the machines currently for sale on bevmaq.com. Free text matches title, manufacturer, model, type, category and the listing text; filters narrow by category slug, manufacturer, country, price (EUR, ExWorks), year, rated capacity per hour, and container (glass, PET, can, keg). Returns compact rows; call get_listing for a machine's full record.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().default("").describe("Free text, e.g. 'isobarometric glass filler crown cork beer' or 'Krones labeller'"),
         category: z.enum(CATEGORIES).optional(),
         manufacturer: z.string().optional().describe("Manufacturer name, matched case-insensitively (KHS, Krones, GAI, Sidel)"),
@@ -113,7 +162,8 @@ export function createMcpServer(services: Services): McpServer {
         available_now: z.boolean().default(false).describe("Only machines that can ship immediately (no 'available from' date)"),
         include_sold: z.boolean().default(false).describe("Also return machines already sold (for history and price references)"),
         limit: z.number().int().min(1).max(50).default(10),
-      },
+      }),
+      outputSchema: SearchListingsOutput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (input) => {
@@ -135,7 +185,7 @@ export function createMcpServer(services: Services): McpServer {
         .filter(({ points }) => points > 0)
         .sort((a, b) => b.points - a.points || (b.listing.year ?? 0) - (a.listing.year ?? 0));
       const results = rows.slice(0, input.limit).map(({ listing }) => ({ ...summarize(listing), available: listing.available }));
-      return json({ total_matches: rows.length, showing: results.length, results });
+      return structured({ total_matches: rows.length, showing: results.length, results });
     },
   );
 
@@ -145,13 +195,14 @@ export function createMcpServer(services: Services): McpServer {
       title: "Get one BEVMAQ listing",
       description:
         "The full record for one machine by SKU (like HR-FIL-GAI-2016-00001): specs, rated capacity, containers and closures, the description by section (overview, technical data, equipment, condition, availability), photos, videos, documents, current price and availability, and the bevmaq.com URL.",
-      inputSchema: { sku: z.string().describe("The SKU, case-insensitive") },
+      inputSchema: z.object({ sku: z.string().describe("The SKU, case-insensitive") }),
+      outputSchema: ListingSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({ sku }) => {
       const record = await services.products.listing(sku);
       if (!record) return failure(`No listing with SKU ${sku.toUpperCase()}.`);
-      return json(toListing(record));
+      return structured(toListing(record));
     },
   );
 
@@ -161,7 +212,8 @@ export function createMcpServer(services: Services): McpServer {
       title: "Catalogue status",
       description:
         "What is on bevmaq.com right now: available and sold counts, available machines per category, the newest listings, machines with a future availability date, and listings without a price. Cheap; call it before searching when you need the lay of the land.",
-      inputSchema: { newest: z.number().int().min(0).max(30).default(8).describe("How many of the newest listings to include") },
+      inputSchema: z.object({ newest: z.number().int().min(0).max(30).default(8).describe("How many of the newest listings to include") }),
+      outputSchema: CatalogStatusOutput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({ newest }) => {
@@ -170,7 +222,7 @@ export function createMcpServer(services: Services): McpServer {
       const perCategory: Record<string, number> = {};
       for (const listing of listings) perCategory[listing.category || "other"] = (perCategory[listing.category || "other"] ?? 0) + 1;
       const sorted = [...listings].sort((a, b) => (b.created ?? "").localeCompare(a.created ?? ""));
-      return json({
+      return structured({
         available: listings.length,
         sold_or_withdrawn: rows.length - listings.length,
         per_category: Object.fromEntries(Object.entries(perCategory).sort((a, b) => b[1] - a[1])),
@@ -189,16 +241,19 @@ export function createMcpServer(services: Services): McpServer {
       title: "Search BEVMAQ knowledge",
       description:
         "Full-text search over BEVMAQ's internal knowledge: architecture, systems, processes, conventions, the product API, how the repositories fit together. Returns the best-matching passages with their document path; call read_doc for the whole document.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().min(1),
         limit: z.number().int().min(1).max(20).default(6),
-      },
+      }),
+      outputSchema: SearchKnowledgeOutput,
       annotations: { readOnlyHint: true },
     },
     async ({ query, limit }) => {
       const hits = services.knowledge.search(query, limit);
-      if (!hits.length) return text(`Nothing in the knowledge folder matches "${query}". Documents available: ${services.knowledge.list().map((doc) => doc.path).join(", ") || "none yet"}.`);
-      return json({ hits });
+      if (!hits.length) {
+        return structured({ hits }, `Nothing in the knowledge folder matches "${query}". Documents available: ${services.knowledge.list().map((doc) => doc.path).join(", ") || "none yet"}.`);
+      }
+      return structured({ hits });
     },
   );
 
@@ -207,11 +262,11 @@ export function createMcpServer(services: Services): McpServer {
     {
       title: "Read a knowledge document",
       description: "The full text of one knowledge document by path (as returned by search_knowledge or listed under the bevmaq://docs resources). Pass no path to list every document with its title and description.",
-      inputSchema: { path: z.string().optional() },
+      inputSchema: z.object({ path: z.string().optional() }),
       annotations: { readOnlyHint: true },
     },
     async ({ path }) => {
-      if (!path) return json({ documents: services.knowledge.list() });
+      if (!path) return structured({ documents: services.knowledge.list() });
       const doc = services.knowledge.get(path);
       if (!doc) return failure(`No document at ${path}. Known: ${services.knowledge.list().map((item) => item.path).join(", ")}`);
       return text(`# ${doc.title}\n\n${doc.description ? `${doc.description}\n\n` : ""}${doc.body.trim()}`);
@@ -225,7 +280,7 @@ export function createMcpServer(services: Services): McpServer {
     {
       title: "BEVMAQ repository map",
       description: "Which BEVMAQ repository does what: purpose, stack, where it runs, how to start it, what it talks to, how it deploys. Read this before opening a repository or wiring two systems together.",
-      inputSchema: {},
+      inputSchema: z.object({}),
       annotations: { readOnlyHint: true },
     },
     async () => text(renderRepoMap(await loadRepoMap(services.repoMapPath)) || "repos.yaml is empty."),
@@ -238,18 +293,18 @@ export function createMcpServer(services: Services): McpServer {
     {
       title: "Vercel deploy status",
       description: "Recent Vercel deployments for the BEVMAQ team: state, target, branch, commit message, timing. Pass a project name to narrow; leave it empty to list the projects and the latest deployments across the team.",
-      inputSchema: {
+      inputSchema: z.object({
         project: z.string().optional().describe("Vercel project name"),
         limit: z.number().int().min(1).max(20).default(5),
-      },
+      }),
+      outputSchema: DeployStatusOutput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({ project, limit }) => {
-      if (!services.vercel.configured) return text("Vercel is not configured on this server: set VERCEL_TOKEN (and VERCEL_TEAM_ID) to enable deploy_status.");
+      if (!services.vercel.configured) return failure("Vercel is not configured on this server: set VERCEL_TOKEN (and VERCEL_TEAM_ID) to enable deploy_status.");
       const deployments = await services.vercel.deployments(project, limit);
-      if (project) return json({ project, deployments });
-      const projects = await services.vercel.projects();
-      return json({ projects, latest: deployments });
+      const projects = project ? [] : await services.vercel.projects();
+      return structured({ project: project ?? null, projects, deployments });
     },
   );
 
@@ -258,7 +313,7 @@ export function createMcpServer(services: Services): McpServer {
   server.registerResource(
     "knowledge-doc",
     new ResourceTemplate("bevmaq://docs/{+path}", {
-      list: async () => ({
+      list: () => ({
         resources: services.knowledge.list().map((doc) => ({
           uri: `bevmaq://docs/${doc.path}`,
           name: doc.title,
@@ -267,8 +322,8 @@ export function createMcpServer(services: Services): McpServer {
         })),
       }),
     }),
-    { title: "BEVMAQ knowledge documents", description: "One markdown document from the knowledge folder", mimeType: "text/markdown" },
-    async (uri, { path }) => {
+    { title: "BEVMAQ knowledge documents", description: "One markdown document from the knowledge folder", mimeType: "text/markdown", cacheHint: DOC_CACHE },
+    (uri, { path }) => {
       const doc = services.knowledge.get(String(path));
       if (!doc) throw new Error(`No document at ${String(path)}`);
       return { contents: [{ uri: uri.href, mimeType: "text/markdown", text: doc.body }] };
@@ -278,7 +333,7 @@ export function createMcpServer(services: Services): McpServer {
   server.registerResource(
     "repo-map",
     "bevmaq://repos",
-    { title: "BEVMAQ repository map", description: "repos.yaml rendered as markdown", mimeType: "text/markdown" },
+    { title: "BEVMAQ repository map", description: "repos.yaml rendered as markdown", mimeType: "text/markdown", cacheHint: DOC_CACHE },
     async (uri) => ({ contents: [{ uri: uri.href, mimeType: "text/markdown", text: renderRepoMap(await loadRepoMap(services.repoMapPath)) }] }),
   );
 
@@ -289,7 +344,7 @@ export function createMcpServer(services: Services): McpServer {
     {
       title: "Brief a machine for a buyer",
       description: "A plain, complete summary of one listed machine for a buyer: what it is, what it runs, capacity, condition, what is included, availability, price basis, and what to check at an inspection.",
-      argsSchema: { sku: z.string().describe("The machine's SKU") },
+      argsSchema: z.object({ sku: z.string().describe("The machine's SKU") }),
     },
     ({ sku }) => ({
       messages: [
@@ -309,10 +364,10 @@ export function createMcpServer(services: Services): McpServer {
     {
       title: "Instagram ad brief for a machine",
       description: "The creative brief the designer works from for one machine: hooks, DE and EN copy, the facts that must appear, which photos to use, hashtags and a CTA. BEVMAQ's voice, no AI vendor mentioned.",
-      argsSchema: {
+      argsSchema: z.object({
         sku: z.string().describe("The machine's SKU"),
         channel: z.enum(["instagram_feed", "instagram_story", "linkedin"]).optional().describe("Defaults to instagram_feed"),
-      },
+      }),
     },
     ({ sku, channel }) => ({
       messages: [

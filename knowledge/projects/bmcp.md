@@ -25,25 +25,30 @@ artifacts (through the viewer's connector), and the buyer agent's managed-agents
 
 ## Transport and auth
 
-Streamable HTTP at `/mcp`, stateless (a fresh server per request), so it runs on
-serverless and on a box alike; `bun src/stdio.ts` serves the same tools over stdio for a
-local Claude Code. `BMCP_TOKEN` (comma-separated tokens allowed) turns on bearer auth;
-claude.ai custom connectors take a fixed `Authorization` header, Claude Code takes
-`--header`. Unset, the server is open, which is acceptable only while it exposes public
-data.
+Streamable HTTP at `/mcp`, served by MCP SDK 2.0's `createMcpHandler`: a fresh server per
+request, the 2026-07-28 protocol for current clients (no sessions, no initialize handshake,
+`server/discover`, cache hints on the list results) and stateless serving for 2025-era
+clients (2025-06-18, 2025-11-25) on the same endpoint. Tools that return data declare an
+output schema and return structured content. `bun src/stdio.ts` serves the same tools over
+stdio for a local Claude Code. `BMCP_TOKEN` (comma-separated tokens allowed) turns on bearer
+auth; claude.ai custom connectors take a fixed `Authorization` header, Claude Code takes
+`--header`, the Claude API's MCP connector takes `authorization_token` on the
+`mcp_servers` entry (paired with an `mcp_toolset` tool, beta `mcp-client-2025-11-20`).
+Unset, the server is open, which is acceptable only while it exposes public data.
 
 ## Deploy
 
 `vercel.json` pins the Bun framework preset (`framework: "bun"`) and the Bun 1.4 runtime;
 the preset picks up `src/server.ts` because it calls `Bun.serve()` once. The pin is needed
 because Vercel otherwise detects Hono first and builds for Node. `package.json` `main` also
-names `src/server.ts` (the builder would otherwise take the first module importing Hono),
-and `typescript` stays on 5.x (the builder type-checks through the classic compiler API,
-which 7.x lacks). `vercel.json` ships the knowledge folder and `repos.yaml` with the function
-through `functions` / `includeFiles`, since they are read at run time, not imported. Anywhere
-else: the Dockerfile, or
-`bun src/server.ts` under a process manager. `/health` reports available listings, doc
-count and whether Vercel is configured.
+names `src/server.ts` (the builder would otherwise take the first module importing Hono).
+`buildCommand` is `tsc --noEmit`: TypeScript 7 is the native compiler and ships no
+JavaScript compiler API, which the builder's own type-check would need, so the build runs
+the native `tsc` and the builder skips its check. `vercel.json` ships the knowledge folder
+and `repos.yaml` with the function through `functions` / `includeFiles`, since they are read
+at run time, not imported. Anywhere else: the Dockerfile, or `bun src/server.ts` under a
+process manager. `/health` reports available listings, doc count and whether Vercel is
+configured.
 
 ## Extending
 

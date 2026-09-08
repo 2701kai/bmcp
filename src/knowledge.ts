@@ -10,6 +10,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import MiniSearch from "minisearch";
+import { z } from "zod";
 
 export interface Doc {
   /** Path relative to the knowledge root, forward slashes, e.g. `platform/product-api.md`. */
@@ -29,13 +30,15 @@ export interface Chunk {
   text: string;
 }
 
-export interface Hit {
-  path: string;
-  title: string;
-  heading: string;
-  score: number;
-  snippet: string;
-}
+/** One search hit; also the outputSchema row of search_knowledge. */
+export const HitSchema = z.object({
+  path: z.string(),
+  title: z.string(),
+  heading: z.string(),
+  score: z.number(),
+  snippet: z.string(),
+});
+export type Hit = z.infer<typeof HitSchema>;
 
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 

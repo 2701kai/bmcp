@@ -5,50 +5,66 @@
  * closures the machine runs, so a tool result carries facts instead of markup.
  */
 
+import { z } from "zod";
 import type { ApiListing } from "./product-api.ts";
 
-export interface Section {
-  heading: string;
-  lines: string[];
-}
+export const SectionSchema = z.object({ heading: z.string(), lines: z.array(z.string()) });
+export const CapacitySchema = z.object({ value: z.number(), unit: z.string() });
 
-export interface Capacity {
-  value: number;
-  unit: string;
-}
+/** One machine as the tools return it; the schema is also the tools' outputSchema. */
+export const ListingSchema = z.object({
+  sku: z.string(),
+  title: z.string(),
+  manufacturer: z.string(),
+  model: z.string(),
+  category: z.string(),
+  categorySlug: z.string(),
+  type: z.string(),
+  country: z.string(),
+  year: z.number().nullable(),
+  price: z.number().nullable(),
+  currency: z.string(),
+  priceBasis: z.literal("ExWorks, excl. VAT"),
+  available: z.boolean(),
+  availability: z.string(),
+  availableOn: z.string().nullable(),
+  capacity: CapacitySchema.nullable(),
+  containers: z.array(z.string()),
+  closures: z.array(z.string()),
+  beverages: z.array(z.string()),
+  formats: z.string().nullable(),
+  overview: z.string(),
+  specs: z.record(z.string(), z.string()),
+  sections: z.array(SectionSchema),
+  url: z.string(),
+  thumbnail: z.string().nullable(),
+  images: z.array(z.object({ url: z.string(), perspective: z.string().nullable() })),
+  videos: z.array(z.string()),
+  documents: z.array(z.string()),
+  created: z.string().nullable(),
+  lastUpdated: z.string().nullable(),
+});
 
-export interface Listing {
-  sku: string;
-  title: string;
-  manufacturer: string;
-  model: string;
-  category: string;
-  categorySlug: string;
-  type: string;
-  country: string;
-  year: number | null;
-  price: number | null;
-  currency: string;
-  priceBasis: "ExWorks, excl. VAT";
-  available: boolean;
-  availability: string;
-  availableOn: string | null;
-  capacity: Capacity | null;
-  containers: string[];
-  closures: string[];
-  beverages: string[];
-  formats: string | null;
-  overview: string;
-  specs: Record<string, string>;
-  sections: Section[];
-  url: string;
-  thumbnail: string | null;
-  images: { url: string; perspective: string | null }[];
-  videos: string[];
-  documents: string[];
-  created: string | null;
-  lastUpdated: string | null;
-}
+/** The compact row search_listings and catalog_status return. */
+export const ListingSummarySchema = z.object({
+  sku: z.string(),
+  title: z.string(),
+  manufacturer: z.string(),
+  type: z.string(),
+  category: z.string(),
+  year: z.number().nullable(),
+  country: z.string(),
+  price: z.string(),
+  capacity: z.string().nullable(),
+  containers: z.string().nullable(),
+  availability: z.string(),
+  url: z.string(),
+});
+
+export type Section = z.infer<typeof SectionSchema>;
+export type Capacity = z.infer<typeof CapacitySchema>;
+export type Listing = z.infer<typeof ListingSchema>;
+export type ListingSummary = z.infer<typeof ListingSummarySchema>;
 
 const SITE = "https://www.bevmaq.com";
 const SPEC_HEADINGS = new Set(["technical data", "technical details", "technical specifications", "specifications", "specification"]);
@@ -260,7 +276,7 @@ export function toListing(record: ApiListing): Listing {
 }
 
 /** The one-line form search results use. */
-export function summarize(listing: Listing): Record<string, unknown> {
+export function summarize(listing: Listing): ListingSummary {
   return {
     sku: listing.sku,
     title: listing.title,
