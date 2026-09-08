@@ -3,17 +3,24 @@
  * so instead of failing. `VERCEL_TEAM_ID` scopes every call to the BEVMAQ team.
  */
 
-export interface Deployment {
-  project: string;
-  state: string;
-  target: string;
-  url: string;
-  branch: string | null;
-  commit: string | null;
-  created: string;
-  ready: string | null;
-  durationSeconds: number | null;
-}
+import { z } from "zod";
+
+/** One deployment as deploy_status returns it; also its outputSchema row. */
+export const DeploymentSchema = z.object({
+  project: z.string(),
+  state: z.string(),
+  target: z.string(),
+  url: z.string(),
+  branch: z.string().nullable(),
+  commit: z.string().nullable(),
+  created: z.string(),
+  ready: z.string().nullable(),
+  durationSeconds: z.number().nullable(),
+});
+export type Deployment = z.infer<typeof DeploymentSchema>;
+
+export const ProjectSchema = z.object({ name: z.string(), framework: z.string().nullable(), updated: z.string().nullable() });
+export type Project = z.infer<typeof ProjectSchema>;
 
 interface VercelDeployment {
   uid: string;
@@ -62,7 +69,7 @@ export class Vercel {
     return (await response.json()) as T;
   }
 
-  async projects(): Promise<{ name: string; framework: string | null; updated: string | null }[]> {
+  async projects(): Promise<Project[]> {
     const data = await this.get<{ projects: VercelProject[] }>("/v9/projects", { limit: 100 });
     return data.projects.map((project) => ({
       name: project.name,

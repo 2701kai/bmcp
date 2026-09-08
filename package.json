@@ -1,6 +1,6 @@
 {
   "name": "bmcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "BEVMAQ MCP server: catalogue, knowledge, repos and deploy state for every Claude surface",
   "author": "2701kai",
   "license": "MIT",
@@ -16,14 +16,15 @@
     "reindex": "bun src/knowledge.ts --reindex"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "hono": "^4.13.7",
     "minisearch": "^7.2.0",
     "yaml": "^2.9.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.1",
-    "typescript": "^5.9.3"
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@types/bun": "^1.4.2",
+    "typescript": "^7.0.2"
   }
 }

@@ -7,7 +7,7 @@ import { ProductApi } from "./product-api.ts";
 import { Vercel } from "./vercel.ts";
 
 export const ROOT = join(import.meta.dirname, "..");
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
 
 export async function buildServices(overrides: Partial<Services> = {}): Promise<Services> {
   const knowledge = overrides.knowledge ?? new Knowledge(process.env.BMCP_KNOWLEDGE_DIR ?? join(ROOT, "knowledge"));

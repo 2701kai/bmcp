@@ -4,9 +4,9 @@
  * Same tools as the HTTP server; no auth, since only this machine can reach it.
  */
 
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { createMcpServer } from "./mcp.ts";
 import { buildServices } from "./services.ts";
 
-const server = createMcpServer(await buildServices());
-await server.connect(new StdioServerTransport());
+const services = await buildServices();
+serveStdio(() => createMcpServer(services));

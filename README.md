@@ -3,7 +3,7 @@
 The BEVMAQ MCP server. One server that every Claude surface can use: Claude Code in
 any BEVMAQ repository, claude.ai chat and the desktop and mobile apps (as a custom
 connector), published artifacts (through the viewer's connector), and the buyer agent's
-managed-agents path. TypeScript 5, Bun 1.4, MCP SDK 1.30, Hono.
+managed-agents path. TypeScript 7, Bun 1.4, MCP SDK 2.0 (protocol 2026-07-28), Hono 4.
 
 ## What it serves
 
@@ -19,7 +19,9 @@ managed-agents path. TypeScript 5, Bun 1.4, MCP SDK 1.30, Hono.
 
 Every document is also an MCP resource (`bevmaq://docs/<path>`, plus `bevmaq://repos`),
 and two prompts package recurring jobs: `machine_brief` (a buyer's summary of one machine)
-and `ad_brief` (the designer's creative brief for one machine, in BEVMAQ's voice).
+and `ad_brief` (the designer's creative brief for one machine, in BEVMAQ's voice). Tools
+that return data declare an output schema and return structured content, so a client can
+use the JSON directly instead of parsing text.
 
 ## Run it
 
@@ -28,7 +30,7 @@ git clone https://github.com/2701kai/bmcp.git && cd bmcp
 bun install
 cp .env.example .env            # set BMCP_TOKEN (openssl rand -hex 32)
 bun run dev                     # http://localhost:8787/mcp, /health, /
-bun test                        # 12 tests, offline: transform, knowledge, auth, MCP round trip
+bun test                        # 13 tests, offline: transform, knowledge, auth, MCP round trips (current and 2025-era clients)
 bun run typecheck
 ```
 
@@ -54,6 +56,20 @@ organisation admin and sent on every request). Once connected, the tools are ava
 every chat and in the apps, and an artifact can call them with the viewer's connector
 access (`capabilities: {mcp: {servers: [{server: "bevmaq", tools: [...]}]}}`).
 
+**Claude API and Managed Agents:** the Messages API connects to the server itself through
+the MCP connector: `mcp_servers: [{type: "url", url: "https://mcp.bevmaq.com/mcp", name:
+"bevmaq", authorization_token: "<BMCP_TOKEN>"}]` together with `tools: [{type:
+"mcp_toolset", mcp_server_name: "bevmaq"}]` and the beta header `mcp-client-2025-11-20`
+(both halves are required). A Managed Agent references the same server from its agent
+configuration.
+
+**Protocol.** MCP SDK 2.0. Current clients speak the 2026-07-28 revision: no sessions, no
+initialize handshake, `server/discover`, cache hints on the list results. 2025-era clients
+(2025-06-18 and 2025-11-25, which claude.ai and Claude Code shipped with) are served
+statelessly on the same endpoint, a fresh server per request. Browser clients send the
+`MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` request headers, which CORS on `/mcp`
+allows.
+
 **Auth model.** `BMCP_TOKEN` accepts several comma-separated tokens, so Claude Code and
 the connector can hold different ones and one can be rotated without the other. Unset,
 the server is open; acceptable only while every tool exposes public data (the catalogue
@@ -65,16 +81,18 @@ OAuth, which Claude also supports (DCR or CIMD); this server does not need it ye
 **Vercel, Bun runtime.** `vercel.json` pins `framework: "bun"` and `bunVersion: "1.4.x"`;
 the Bun framework preset picks up `src/server.ts` because it calls `Bun.serve()` once at
 start. The pin matters: without it Vercel detects Hono from `package.json` first and builds
-for Node, where `Bun.serve()` does not exist. Two more things keep that build green:
-`package.json` `main` names `src/server.ts` (the builder would otherwise take the first
-module that imports Hono as the entry), and `typescript` stays on 5.x (the builder
-type-checks with the project's copy through the classic compiler API, which 7.x does not
-ship). The knowledge folder and `repos.yaml` are read at run time rather than imported, so
-`vercel.json` lists them under `functions` / `includeFiles`; without that the function ships
-without them and `/health` reports zero documents. Push the repo,
-import it in Vercel, set `BMCP_TOKEN` (and `VERCEL_TOKEN`, `VERCEL_TEAM_ID` for
-`deploy_status`) as environment variables, attach `mcp.bevmaq.com`. The MCP endpoint is
-stateless (a fresh server per request), which is what serverless wants.
+for Node, where `Bun.serve()` does not exist. Three more settings keep that build green.
+`package.json` `main` names `src/server.ts`, because the builder would otherwise take the
+first module that imports Hono as the entry. `vercel.json` sets `buildCommand` to
+`tsc --noEmit`: the builder's own type-check loads the project's `typescript` through the
+classic JavaScript compiler API, which TypeScript 7 (the native compiler) no longer ships,
+so the build runs the native `tsc` itself and the builder skips its check. And the knowledge
+folder and `repos.yaml` are read at run time rather than imported, so `vercel.json` lists
+them under `functions` / `includeFiles`; without that the function ships without them and
+`/health` reports zero documents. Push the repo, import it in Vercel, set `BMCP_TOKEN` (and
+`VERCEL_TOKEN`, `VERCEL_TEAM_ID` for `deploy_status`) as environment variables, attach
+`mcp.bevmaq.com`. The MCP endpoint is stateless (a fresh server per request), which is what
+serverless wants.
 
 **Anywhere else.** `docker build -t bmcp . && docker run -p 8787:8787 --env-file .env bmcp`,
 or `bun src/server.ts` under a process manager. `/health` reports available listings,

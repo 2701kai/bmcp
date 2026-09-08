@@ -1,8 +1,7 @@
 /** A real MCP client against the Hono app over HTTP, with the product API stubbed. */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { join } from "node:path";
 import { createApp } from "../src/http.ts";
 import { Knowledge } from "../src/knowledge.ts";
@@ -54,8 +53,10 @@ describe("bevmaq MCP over HTTP", () => {
 
   test("lists tools, resources and prompts", async () => {
     const client = await connect("secret-token");
-    const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
-    expect(tools).toEqual(["catalog_status", "deploy_status", "get_listing", "read_doc", "repo_map", "search_knowledge", "search_listings"]);
+    const tools = (await client.listTools()).tools;
+    expect(tools.map((tool) => tool.name).sort()).toEqual(["catalog_status", "deploy_status", "get_listing", "read_doc", "repo_map", "search_knowledge", "search_listings"]);
+    expect(tools.find((tool) => tool.name === "get_listing")?.outputSchema).toBeDefined();
+    expect(tools.find((tool) => tool.name === "search_listings")?.annotations?.readOnlyHint).toBe(true);
     const prompts = (await client.listPrompts()).prompts.map((prompt) => prompt.name).sort();
     expect(prompts).toEqual(["ad_brief", "machine_brief"]);
     const resources = await client.listResources();
@@ -105,12 +106,29 @@ describe("bevmaq MCP over HTTP", () => {
     const map = await client.callTool({ name: "repo_map", arguments: {} });
     expect(firstText(map)).toContain("## bmi_shopping");
     const deploys = await client.callTool({ name: "deploy_status", arguments: {} });
+    expect(deploys.isError).toBe(true);
     expect(firstText(deploys)).toContain("VERCEL_TOKEN");
     const brief = await client.getPrompt({ name: "ad_brief", arguments: { sku: GAI, channel: "instagram_story" } });
     expect((brief.messages[0]?.content as { text: string }).text).toContain(GAI);
     const resource = await client.readResource({ uri: "bevmaq://docs/platform/product-api.md" });
     expect((resource.contents[0] as { text: string }).text).toContain("/v1/status/");
     await client.close();
+  });
+
+  test("serves 2025-era clients statelessly", async () => {
+    const post = (body: unknown) =>
+      fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: "Bearer secret-token" },
+        body: JSON.stringify(body),
+      });
+    const init = await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "legacy", version: "0" } } });
+    expect(init.status).toBe(200);
+    expect(init.headers.get("mcp-session-id")).toBeNull();
+    expect(await init.text()).toContain('"protocolVersion":"2025-11-25"');
+    const list = await post({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
+    expect(list.status).toBe(200);
+    expect(await list.text()).toContain("search_listings");
   });
 
   test("caches the product API between calls", async () => {
